@@ -1,0 +1,3 @@
+proveedor,numero_factura,fecha,total_base_imponible,total_cuota_iva,total,lineas_iva
+"FERRETERIA CASTRO DELGADO, S.L.",044104,2026-02-23,951.0,66.57,1017.57 EUR,"[{""base"": 951.0, ""porcentaje"": 7, ""cuota"": 66.57}]"
+"FERRETERIA CASTRO DELGADO, S.L.",044104,2026-02-23,951.0,66.57,1017.57 EUR,"[{""base"": 951.0, ""porcentaje"": 7.0, ""cuota"": 66.57}]"
