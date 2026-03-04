@@ -4,7 +4,7 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
-# Cargamos las variables de entorno aquí
+# Cargamos las variables de entorno
 load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -39,13 +39,14 @@ def extraer_datos_factura(ruta_archivo):
 
         ESTRUCTURA OBLIGATORIA:
         {
-          "proveedor": string | null,
-          "numero_factura": string | null,
-          "fecha": string | null,
-          "total_base_imponible": number | null,
-          "total_cuota_iva": number | null,
-          "total": string | null,
-          "lineas_iva": [{"base": number, "porcentaje": number, "cuota": number}]
+        "proveedor_emisor": "Nombre de la empresa que vende/emite la factura. string | null",
+        "cliente_receptor": "Nombre de la empresa que compra/recibe la factura. string | null",
+        "numero_factura": string | null,
+        "fecha": string | null,
+        "total_base_imponible": number | null,
+        "total_cuota_iva": number | null,
+         "total": string | null,
+         "lineas_iva": [{"base": number, "porcentaje": number, "cuota": number}]
         }
         """
 
@@ -63,7 +64,7 @@ def extraer_datos_factura(ruta_archivo):
     except Exception as e:
         raise e
     finally:
-        # Siempre limpiamos el archivo del servidor de Google
+        # limpiamos el archivo del servidor de Google
         if archivo_subido:
             try:
                 client.files.delete(name=archivo_subido.name)
