@@ -10,23 +10,23 @@ def obtener_ruta_csv():
 
 def guardar_en_csv(datos_factura):
     ruta_csv = obtener_ruta_csv()
-    archivo_existe = os.path.isfile(ruta_csv)
 
-    # Convertimos la lista de iva a texto
+    # Comprobamos si el archivo no existe o si existe pero está vacío (0 bytes)
+    es_nuevo = not os.path.isfile(ruta_csv) or os.path.getsize(ruta_csv) == 0
+
     if 'lineas_iva' in datos_factura and isinstance(datos_factura['lineas_iva'], list):
         datos_factura['lineas_iva'] = json.dumps(datos_factura['lineas_iva'])
 
-    # cabeceras
     cabeceras = [
         "proveedor_emisor", "cliente_receptor", "numero_factura",
         "fecha", "total_base_imponible", "total_cuota_iva", "total", "lineas_iva"
     ]
 
-    with open(ruta_csv, 'a', newline='', encoding='utf-8') as f:
-        # extrasaction='ignore' es vital aquí por si Gemini devuelve algún campo que no esperamos
+    # utf-8-sig truco para que Excel lea las Ñ y acentos
+    with open(ruta_csv, 'a', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=cabeceras, extrasaction='ignore')
 
-        if not archivo_existe:
+        if es_nuevo:
             writer.writeheader()
 
         writer.writerow(datos_factura)
