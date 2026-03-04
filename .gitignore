@@ -1,0 +1,6 @@
+# Entornos virtuales y configuraciones de PyCharm
+venv/
+.idea/
+
+# Variables de entorno secretas
+.env
