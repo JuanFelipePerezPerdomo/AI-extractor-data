@@ -9,7 +9,7 @@ env/
 
 # Variables de entorno (¡MUY IMPORTANTE!)
 .env
-src/.env.local
+.env.local
 
 # Archivos temporales de Python
 **/__pycache__/
