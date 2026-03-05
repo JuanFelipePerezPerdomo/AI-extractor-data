@@ -3,7 +3,8 @@ from tkinter import filedialog, messagebox
 import time
 
 from .api_gemini import extraer_datos_factura
-from .gestor_csv import guardar_en_csv, obtener_ruta_csv
+# NUEVO: Importamos desde el gestor_excel
+from .gestor_excel import guardar_en_excel, obtener_ruta_excel
 
 
 class AppExtractor:
@@ -13,7 +14,6 @@ class AppExtractor:
         self.ventana.geometry("450x250")
         self.ventana.config(padx=20, pady=20)
 
-        # Lista para guardar las rutas de todos los archivos seleccionados
         self.archivos_seleccionados = []
 
         tk.Label(self.ventana, text="1. Selecciona las facturas a procesar:", font=("Arial", 10, "bold")).pack(
@@ -25,22 +25,21 @@ class AppExtractor:
         self.lbl_archivo_seleccionado = tk.Label(self.ventana, text="0 archivos seleccionados", fg="gray")
         self.lbl_archivo_seleccionado.pack(anchor="w", pady=(5, 15))
 
-        ruta_csv = obtener_ruta_csv()
-        lbl_info = tk.Label(self.ventana, text=f"Los datos se guardan en:\n{ruta_csv}", fg="blue", justify="left")
+        ruta_excel = obtener_ruta_excel()
+        lbl_info = tk.Label(self.ventana, text=f"Los datos se guardan en:\n{ruta_excel}", fg="green", justify="left")
         lbl_info.pack(anchor="w", pady=(0, 15))
 
-        self.btn_procesar = tk.Button(self.ventana, text="Procesar y Añadir a CSV", command=self.procesar_documentos,
-                                      bg="#0d6efd", fg="white", font=("Arial", 11, "bold"))
+        # Textos actualizados a Excel
+        self.btn_procesar = tk.Button(self.ventana, text="Procesar y Añadir a Excel", command=self.procesar_documentos,
+                                      bg="#107c41", fg="white", font=("Arial", 11, "bold"))
         self.btn_procesar.pack(fill="x")
 
     def seleccionar_archivos(self):
-        # askopenfilenames (en plural) permite selección múltiple
         filepaths = filedialog.askopenfilenames(
             title="Selecciona una o varias facturas",
             filetypes=(("PDFs", "*.pdf"), ("Imágenes", "*.jpg *.jpeg *.png"), ("Todos los archivos", "*.*"))
         )
         if filepaths:
-            # Convertimos la tupla que devuelve Tkinter a una lista de Python
             self.archivos_seleccionados = list(filepaths)
             self.lbl_archivo_seleccionado.config(
                 text=f"{len(self.archivos_seleccionados)} archivos seleccionados listos")
@@ -56,16 +55,16 @@ class AppExtractor:
         exitosos = 0
         errores = 0
 
-        # Recorremos todas las facturas seleccionadas
         for i, ruta_archivo in enumerate(self.archivos_seleccionados):
             self.btn_procesar.config(text=f"Procesando {i + 1} de {total_archivos}...")
-            self.ventana.update()  # Forzamos a la ventana a actualizar el texto
+            self.ventana.update()
 
             try:
                 datos_json = extraer_datos_factura(ruta_archivo)
 
                 if isinstance(datos_json, dict):
-                    guardar_en_csv(datos_json)
+                    # NUEVO: Llamamos a la función de Excel
+                    guardar_en_excel(datos_json)
                     exitosos += 1
                 else:
                     errores += 1
@@ -74,15 +73,12 @@ class AppExtractor:
                 print(f"Error con el archivo {ruta_archivo}: {str(e)}")
                 errores += 1
 
-            # PAUSA DE SEGURIDAD (Rate Limit de Google)
-            # Solo hacemos la pausa si NO estamos en la última factura
             if i < total_archivos - 1:
                 self.btn_procesar.config(text=f"Pausa de seguridad... ({i + 1}/{total_archivos})")
                 self.ventana.update()
-                time.sleep(4)  # Esperamos 4 segundos
+                time.sleep(4)
 
-        # Terminamos todo el lote
-        self.btn_procesar.config(text="Procesar y Añadir a CSV", state=tk.NORMAL)
+        self.btn_procesar.config(text="Procesar y Añadir a Excel", state=tk.NORMAL)
         self.archivos_seleccionados = []
         self.lbl_archivo_seleccionado.config(text="0 archivos seleccionados")
 
