@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import time
 import os
-import shutil  # NUEVO: Librería de Python para mover archivos físicamente
+import shutil  # Librería de Python para mover archivos físicamente
 
 from .api_gemini import extraer_datos_factura
 from .gestor_excel import guardar_en_excel, obtener_ruta_excel
@@ -12,12 +12,12 @@ class AppExtractor:
     def __init__(self):
         self.ventana = tk.Tk()
         self.ventana.title("Procesador Automático de Facturas")
-        # Hemos hecho la ventana un poquito más alta para el nuevo botón
+        # ventana un poquito más alta para el nuevo botón
         self.ventana.geometry("500x350")
         self.ventana.config(padx=20, pady=20)
 
         self.archivos_seleccionados = []
-        self.carpeta_destino = ""  # NUEVO: Guardará la ruta donde mover los PDFs
+        self.carpeta_destino = ""  # Guardará la ruta donde mover los PDFs
 
         # --- SECCIÓN 1: ARCHIVOS ORIGEN ---
         tk.Label(self.ventana, text="1. Selecciona las facturas a procesar:", font=("Arial", 10, "bold")).pack(
@@ -27,7 +27,7 @@ class AppExtractor:
         self.lbl_archivo_seleccionado = tk.Label(self.ventana, text="0 archivos seleccionados", fg="gray")
         self.lbl_archivo_seleccionado.pack(anchor="w", pady=(5, 10))
 
-        # --- SECCIÓN 2: CARPETA DESTINO (NUEVO) ---
+        # --- SECCIÓN 2: CARPETA DESTINO ---
         tk.Label(self.ventana, text="2. ¿A qué carpeta movemos los documentos listos?",
                  font=("Arial", 10, "bold")).pack(anchor="w", pady=(0, 5))
         btn_carpeta = tk.Button(self.ventana, text="Elegir Carpeta Destino", command=self.seleccionar_carpeta)
@@ -55,7 +55,7 @@ class AppExtractor:
                 text=f"{len(self.archivos_seleccionados)} archivos seleccionados listos")
 
     def seleccionar_carpeta(self):
-        # NUEVO: Abre un diálogo exclusivo para elegir carpetas
+        # Abre un diálogo exclusivo para elegir carpetas
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta destino")
         if carpeta:
             self.carpeta_destino = carpeta
@@ -66,7 +66,7 @@ class AppExtractor:
             messagebox.showwarning("Advertencia", "Por favor, selecciona al menos un archivo primero.")
             return
 
-        # NUEVO: Bloqueamos si el usuario olvidó elegir la carpeta destino
+        # Bloqueamos si el usuario olvidó elegir la carpeta destino
         if not self.carpeta_destino:
             messagebox.showwarning("Advertencia",
                                    "Por favor, elige la carpeta de destino donde se moverán los documentos.")
@@ -83,11 +83,11 @@ class AppExtractor:
             self.ventana.update()
 
             try:
-                # 1. Extraemos los datos de Gemini
+                # Extraemos los datos de Gemini
                 datos_json = extraer_datos_factura(ruta_archivo)
 
                 if isinstance(datos_json, dict):
-                    # 2. Construir el nombre del documento
+                    # Construir el nombre del documento
                     num_factura = datos_json.get("numero_factura")
 
                     # Seguridad: Si por algún motivo Gemini no encontró el número, ponemos una marca de tiempo
@@ -98,13 +98,13 @@ class AppExtractor:
                     num_factura_limpio = str(num_factura).replace("/", "-").replace("\\", "-")
                     nombre_final_doc = f"Factura_{num_factura_limpio}"
 
-                    # 3. Lo inyectamos en el JSON para que el gestor_excel lo escriba en su columna
+                    # Lo inyectamos en el JSON para que el gestor_excel lo escriba en su columna
                     datos_json["nombre_documento"] = nombre_final_doc
 
-                    # 4. Guardamos en el Excel
+                    # Guardamos en el Excel
                     guardar_en_excel(datos_json)
 
-                    # 5. MOVER Y RENOMBRAR EL ARCHIVO FÍSICO
+                    # MOVER Y RENOMBRAR EL ARCHIVO FÍSICO
                     extension = os.path.splitext(ruta_archivo)[1]  # Extrae si es .pdf, .jpg, etc.
                     nuevo_nombre_con_extension = f"{nombre_final_doc}{extension}"
                     ruta_destino_final = os.path.join(self.carpeta_destino, nuevo_nombre_con_extension)
@@ -116,7 +116,7 @@ class AppExtractor:
                                                           f"{nombre_final_doc}_{contador}{extension}")
                         contador += 1
 
-                    # ¡Mueve la factura original a su nuevo hogar con su nuevo nombre!
+                    # Mueve la factura original a su nueva carpeta con su nuevo nombre
                     shutil.move(ruta_archivo, ruta_destino_final)
 
                     exitosos += 1

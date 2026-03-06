@@ -14,7 +14,7 @@ def guardar_en_excel(datos_factura):
     if 'lineas_iva' in datos_factura and isinstance(datos_factura['lineas_iva'], list):
         datos_factura['lineas_iva'] = json.dumps(datos_factura['lineas_iva'])
 
-    # NUEVO: Hemos añadido "nombre_documento" al principio de la lista
+    # "nombre_documento" al principio de la lista
     cabeceras = [
         "nombre_documento", "proveedor_emisor", "cliente_receptor", "numero_factura",
         "fecha", "total_base_imponible", "total_cuota_iva", "total", "lineas_iva"
