@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext  # Importamos el widget de texto con scroll
+from tkinter import filedialog, messagebox, scrolledtext
 import os
 import shutil
 import time
@@ -10,10 +10,10 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from .api_gemini import extraer_datos_factura
-from .gestor_excel import guardar_en_excel, obtener_ruta_excel
+
+from .gestor_excel import guardar_en_excel, obtener_ruta_excel, factura_existe_en_excel
 
 
-# --- EL DETECTIVE DE WATCHDOG ---
 class DetectarNuevaFactura(FileSystemEventHandler):
     def __init__(self, cola, funcion_log):
         self.cola = cola
@@ -26,31 +26,28 @@ class DetectarNuevaFactura(FileSystemEventHandler):
             self.cola.put(event.src_path)
 
 
-# --- LA APLICACIÓN ---
 class AppExtractor:
     def __init__(self):
         self.ventana = tk.Tk()
         self.ventana.title("Robot RPA: Extractor de Facturas")
-        # Ventana más grande para acomodar la consola
         self.ventana.geometry("600x650")
         self.ventana.config(padx=20, pady=10)
 
-        # INTERCEPCIÓN DEL CIERRE DE VENTANA (Graceful Shutdown)
         self.ventana.protocol("WM_DELETE_WINDOW", self.cerrar_aplicacion)
 
         self.carpeta_origen = ""
         self.carpeta_destino = ""
         self.vigilando = False
-        self.cerrando = False  # Bandera para avisar al hilo secundario de que nos vamos
+        self.cerrando = False
         self.exitosos = 0
         self.errores = 0
+        self.duplicados = 0
 
         self.cola_archivos = queue.Queue()
         self.observer = None
 
         threading.Thread(target=self.trabajador_en_segundo_plano, daemon=True).start()
 
-        # --- SECCIONES 1 y 2: CARPETAS ---
         frame_carpetas = tk.Frame(self.ventana)
         frame_carpetas.pack(fill="x", pady=5)
 
@@ -66,7 +63,6 @@ class AppExtractor:
         self.lbl_destino = tk.Label(frame_carpetas, text="Ninguna", fg="gray", width=40, anchor="w")
         self.lbl_destino.grid(row=1, column=2, sticky="w")
 
-        # --- SECCIÓN 3: CONTROLES ---
         ruta_excel = obtener_ruta_excel()
         tk.Label(self.ventana, text=f"Excel destino: {ruta_excel}", fg="green", font=("Arial", 9)).pack(anchor="w",
                                                                                                         pady=(5, 0))
@@ -78,42 +74,39 @@ class AppExtractor:
         self.lbl_estado = tk.Label(self.ventana, text="Estado: Detenido", font=("Arial", 10, "italic"))
         self.lbl_estado.pack()
 
-        self.lbl_contadores = tk.Label(self.ventana, text="✅ Procesadas: 0   |   ❌ Errores: 0",
+        self.lbl_contadores = tk.Label(self.ventana, text="✅ Proc: 0   |   ⚠️ Dupl: 0   |   ❌ Err: 0",
                                        font=("Arial", 11, "bold"))
         self.lbl_contadores.pack(pady=5)
 
-        # --- NUEVO: CONSOLA DE REGISTRO DE ACTIVIDAD (LOG) ---
         tk.Label(self.ventana, text="Registro de Actividad:", font=("Arial", 10, "bold")).pack(anchor="w")
 
         self.txt_log = scrolledtext.ScrolledText(self.ventana, height=12, state=tk.DISABLED, font=("Consolas", 9),
                                                  bg="#f4f4f4")
         self.txt_log.pack(fill="both", expand=True)
 
-        # Configurar colores para el log
         self.txt_log.tag_config("INFO", foreground="black")
         self.txt_log.tag_config("EXITO", foreground="green")
         self.txt_log.tag_config("ERROR", foreground="red")
         self.txt_log.tag_config("SISTEMA", foreground="blue")
+        self.txt_log.tag_config("WARNING", foreground="#cc5500")
 
-        self.escribir_log("Sistema iniciado correctamente. Esperando configuración...", "SISTEMA")
+        self.escribir_log("Sistema iniciado. Anti-duplicados activado.", "SISTEMA")
 
-    # --- FUNCIÓN PARA ESCRIBIR EN LA CONSOLA DESDE CUALQUIER HILO ---
     def escribir_log(self, mensaje, nivel="INFO"):
         def _escribir():
-            self.txt_log.config(state=tk.NORMAL)  # Habilitar escritura temporalmente
+            self.txt_log.config(state=tk.NORMAL)
             hora = time.strftime("%H:%M:%S")
             self.txt_log.insert(tk.END, f"[{hora}] {mensaje}\n", nivel)
-            self.txt_log.see(tk.END)  # Auto-scroll hacia abajo
-            self.txt_log.config(state=tk.DISABLED)  # Volver a bloquear (Solo lectura)
+            self.txt_log.see(tk.END)
+            self.txt_log.config(state=tk.DISABLED)
 
         self.ventana.after(0, _escribir)
 
-    # --- CIERRE SEGURO ---
     def cerrar_aplicacion(self):
         self.cerrando = True
         self.vigilando = False
         self.btn_vigilar.config(state=tk.DISABLED)
-        self.escribir_log("Cerrando aplicación de forma segura...", "SISTEMA")
+        self.escribir_log("Cerrando aplicación...", "SISTEMA")
         self.actualizar_ui(self.lbl_estado, "Estado: Cerrando procesos...", "red")
 
         if self.observer:
@@ -121,7 +114,7 @@ class AppExtractor:
             self.observer.join(timeout=2)
 
         self.ventana.destroy()
-        os._exit(0)  # Apaga cualquier hilo fantasma que se haya quedado dormido
+        os._exit(0)
 
     def seleccionar_origen(self):
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta de Entrada")
@@ -150,7 +143,16 @@ class AppExtractor:
             self.vigilando = True
             self.btn_vigilar.config(text="⏹ DETENER VIGILANCIA", bg="#dc3545")
             self.actualizar_ui(self.lbl_estado, "Estado: 👁️ Ojos de Watchdog activados...", "blue")
-            self.escribir_log(f"Vigilando carpeta: {self.carpeta_origen}", "SISTEMA")
+
+            extensiones_validas = ('.pdf', '.jpg', '.jpeg', '.png')
+            archivos_existentes = [f for f in os.listdir(self.carpeta_origen) if
+                                   f.lower().endswith(extensiones_validas)]
+
+            if archivos_existentes:
+                self.escribir_log(f"Encontrados {len(archivos_existentes)} archivos pendientes. Procesando...",
+                                  "SISTEMA")
+                for archivo in archivos_existentes:
+                    self.cola_archivos.put(os.path.join(self.carpeta_origen, archivo))
 
             manejador_eventos = DetectarNuevaFactura(self.cola_archivos, self.escribir_log)
             self.observer = Observer()
@@ -160,7 +162,6 @@ class AppExtractor:
             self.vigilando = False
             self.btn_vigilar.config(text="▶ INICIAR VIGILANCIA", bg="#0d6efd")
             self.actualizar_ui(self.lbl_estado, "Estado: Detenido", "black")
-            self.escribir_log("Vigilancia detenida por el usuario.", "SISTEMA")
 
             if self.observer:
                 self.observer.stop()
@@ -169,7 +170,6 @@ class AppExtractor:
     def trabajador_en_segundo_plano(self):
         while not self.cerrando:
             try:
-                # El timeout de 1 segundo permite que el hilo verifique constantemente si hemos cerrado la ventana
                 ruta_completa_origen = self.cola_archivos.get(timeout=1)
             except queue.Empty:
                 continue
@@ -179,39 +179,63 @@ class AppExtractor:
                 continue
 
             archivo_actual = os.path.basename(ruta_completa_origen)
-            time.sleep(1)  # Pausa para asegurar que Windows terminó de copiar el archivo
+            time.sleep(1)
 
             self.actualizar_ui(self.lbl_estado, f"Estado: ⚙️ Procesando '{archivo_actual}'...", "#cc5500")
-            self.escribir_log(f"Extrayendo datos de: {archivo_actual}", "INFO")
 
             try:
                 datos_json = extraer_datos_factura(ruta_completa_origen)
 
                 if isinstance(datos_json, dict):
+                    proveedor = datos_json.get("proveedor_emisor")
                     num_factura = datos_json.get("numero_factura")
+
                     if not num_factura:
                         num_factura = f"Desc_{int(time.time())}"
 
                     num_factura_limpio = str(num_factura).replace("/", "-").replace("\\", "-")
                     nombre_final_doc = f"Factura_{num_factura_limpio}"
                     datos_json["nombre_documento"] = nombre_final_doc
-
-                    guardar_en_excel(datos_json)
-
                     extension = os.path.splitext(archivo_actual)[1]
-                    nuevo_nombre_con_extension = f"{nombre_final_doc}{extension}"
-                    ruta_destino_final = os.path.join(self.carpeta_destino, nuevo_nombre_con_extension)
 
-                    contador = 1
-                    while os.path.exists(ruta_destino_final):
-                        ruta_destino_final = os.path.join(self.carpeta_destino,
-                                                          f"{nombre_final_doc}_{contador}{extension}")
-                        contador += 1
+                    # --- LÓGICA ANTI-DUPLICADOS ---
+                    if factura_existe_en_excel(proveedor, num_factura):
+                        self.duplicados += 1
+                        self.escribir_log(
+                            f"⚠️ IGNORADA: La factura '{num_factura}' de '{proveedor}' ya existe en Excel.", "WARNING")
 
-                    shutil.move(ruta_completa_origen, ruta_destino_final)
-                    self.exitosos += 1
-                    self.escribir_log(f"Completado: {archivo_actual} guardado como {nuevo_nombre_con_extension}",
-                                      "EXITO")
+                        # Creamos carpeta Duplicados si no existe
+                        carpeta_duplicados = os.path.join(self.carpeta_destino, "Duplicados")
+                        os.makedirs(carpeta_duplicados, exist_ok=True)
+
+                        nuevo_nombre = f"Duplicado_{nombre_final_doc}{extension}"
+                        ruta_destino_final = os.path.join(carpeta_duplicados, nuevo_nombre)
+
+                        contador = 1
+                        while os.path.exists(ruta_destino_final):
+                            ruta_destino_final = os.path.join(carpeta_duplicados,
+                                                              f"Duplicado_{nombre_final_doc}_{contador}{extension}")
+                            contador += 1
+
+                        shutil.move(ruta_completa_origen, ruta_destino_final)
+                    else:
+                        # FACTURA NUEVA (PROCESO NORMAL)
+                        guardar_en_excel(datos_json)
+
+                        nuevo_nombre_con_extension = f"{nombre_final_doc}{extension}"
+                        ruta_destino_final = os.path.join(self.carpeta_destino, nuevo_nombre_con_extension)
+
+                        contador = 1
+                        while os.path.exists(ruta_destino_final):
+                            ruta_destino_final = os.path.join(self.carpeta_destino,
+                                                              f"{nombre_final_doc}_{contador}{extension}")
+                            contador += 1
+
+                        shutil.move(ruta_completa_origen, ruta_destino_final)
+                        self.exitosos += 1
+                        self.escribir_log(f"Completado: {archivo_actual} -> {nuevo_nombre_con_extension}", "EXITO")
+                    # -------------------------------
+
                 else:
                     raise ValueError("La respuesta de Gemini no era válida.")
 
@@ -223,10 +247,10 @@ class AppExtractor:
                 except:
                     pass
 
-            texto_contadores = f"✅ Procesadas: {self.exitosos}   |   ❌ Errores: {self.errores}"
+            # Actualizamos el contador incluyendo los duplicados
+            texto_contadores = f"✅ Proc: {self.exitosos}   |   ⚠️ Dupl: {self.duplicados}   |   ❌ Err: {self.errores}"
             self.actualizar_ui(self.lbl_contadores, texto_contadores)
 
-            # --- CUENTA ATRÁS FLUIDA ---
             for segundo in range(4, 0, -1):
                 if not self.vigilando or self.cerrando: break
                 self.actualizar_ui(self.lbl_estado, f"Estado: ⏳ Enfriando motor ({segundo}s)...", "#cc5500")
